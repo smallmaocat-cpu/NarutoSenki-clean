@@ -100,6 +100,12 @@ jobs:
           echo "=== java ===" | tee -a ~/build.log
           mkdir -p app/src/main/cocos2dx-java
           cp -r ~/cocos2d-x-2.2.2/cocos2dx/platform/android/java/src/. app/src/main/cocos2dx-java/ || true
+          # cocos2d-x 2.2.2 用了 API 23 已删除的 FloatMath
+          find app/src/main/cocos2dx-java -name '*.java' -print0 | xargs -0 sed -i \
+            -e 's/FloatMath\.ceil(/(float)Math.ceil(/g' \
+            -e 's/FloatMath\.floor(/(float)Math.floor(/g' \
+            -e 's/FloatMath\.sqrt(/(float)Math.sqrt(/g'
+          grep -rn "FloatMath" app/src/main/cocos2dx-java | head -5 | tee -a ~/build.log
           find app/src/main/cocos2dx-java -name '*.java' | head -20 | tee -a ~/build.log
           echo "=== assets ===" | tee -a ~/build.log
           cp -r work/Resources/. app/src/main/assets/ || true
