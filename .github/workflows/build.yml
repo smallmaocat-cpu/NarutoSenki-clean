@@ -8,62 +8,69 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Cache toolchains
+      - name: Cache cocos + ndk
         uses: actions/cache@v4
         with:
           path: |
             ~/cocos2d-x-2.2.2
             ~/android-ndk-r10e
-            ~/upstream
-          key: ns-toolchain-v1
+          key: ns-toolchain-v2
 
       - name: 下载 cocos2d-x 2.2.2
         run: |
-          set -e
+          set -eo pipefail
           cd ~
-          if [ ! -d cocos2d-x-2.2.2 ]; then
-            curl -L --retry 3 -o cocos.zip \
+          if [ ! -f cocos2d-x-2.2.2/CMakeLists.txt ] && [ ! -d cocos2d-x-2.2.2/cocos2dx ]; then
+            curl -fL --retry 5 --retry-all-errors --retry-delay 5 -o cocos.zip \
               https://github.com/LeaderOnePro/NarutoSenki/releases/download/v1.22/cocos2d-x-2.2.2.zip
-            unzip -q cocos.zip
+            unzip -q -o cocos.zip
           fi
-          ls ~/cocos2d-x-2.2.2 | head
+          test -d ~/cocos2d-x-2.2.2/cocos2dx && echo "cocos ok"
 
       - name: 下载 NDK r10e
         run: |
-          set -e
+          set -eo pipefail
           cd ~
-          if [ ! -d android-ndk-r10e ]; then
-            curl -L --retry 3 -o ndk.zip https://dl.google.com/android/repository/android-ndk-r10e-linux-x86_64.zip
-            unzip -q ndk.zip
+          if [ ! -x android-ndk-r10e/ndk-build ]; then
+            curl -fL --retry 5 --retry-all-errors --retry-delay 5 -o ndk.zip \
+              https://dl.google.com/android/repository/android-ndk-r10e-linux-x86_64.zip
+            unzip -q -o ndk.zip
+            chmod +x android-ndk-r10e/ndk-build
           fi
-          ~/android-ndk-r10e/ndk-build --version || true
+          ~/android-ndk-r10e/ndk-build --version
 
       - name: 下载上游游戏源码
         run: |
-          set -e
+          set -eo pipefail
           mkdir -p ~/upstream
-          if [ ! -d ~/upstream/NarutoSenki ]; then
-            curl -L --retry 3 -o upstream.tar.gz \
+          if [ ! -f ~/upstream/.ok ]; then
+            rm -rf ~/upstream/NarutoSenki ~/upstream/src.tar.gz
+            curl -fL --retry 8 --retry-all-errors --retry-delay 5 \
+              --speed-time 60 --speed-limit 1000 \
+              -o ~/upstream/src.tar.gz \
               https://codeload.github.com/LeaderOnePro/NarutoSenki/tar.gz/refs/tags/v1.22
-            mkdir -p upstream/NarutoSenki
-            tar xzf upstream.tar.gz -C upstream/NarutoSenki --strip-components=1
+            ls -l ~/upstream/src.tar.gz
+            tar tzf ~/upstream/src.tar.gz > /dev/null
+            mkdir -p ~/upstream/NarutoSenki
+            tar xzf ~/upstream/src.tar.gz -C ~/upstream/NarutoSenki --strip-components=1
+            test -f ~/upstream/NarutoSenki/Classes/GameLayer.cpp
+            touch ~/upstream/.ok
           fi
-          ls ~/upstream/NarutoSenki
+          ls ~/upstream/NarutoSenki/Classes | wc -l
 
       - name: 组装工程
         run: |
-          set -e
+          set -eo pipefail
           rm -rf work && mkdir -p work
           cp -r ~/upstream/NarutoSenki/Classes  work/Classes
           cp -r ~/upstream/NarutoSenki/Resources work/Resources
           cp -r proj.android work/proj.android
           ln -s ~/cocos2d-x-2.2.2 work/cocos2d-x-2.2.2
-          # 资源里的中文目录/文件统一为 UTF-8 源码
           find work/Classes -type f \( -name '*.cpp' -o -name '*.h' \) -print0 |
           while IFS= read -r -d '' f; do
             if ! iconv -f UTF-8 -t UTF-8 "$f" >/dev/null 2>&1; then
@@ -74,41 +81,38 @@ jobs:
 
       - name: ndk-build
         run: |
-          set -e
+          set -eo pipefail
           cd work/proj.android
           ~/android-ndk-r10e/ndk-build -j4 \
             NDK_PROJECT_PATH=. \
             APP_BUILD_SCRIPT=./jni/Android.mk \
-            NDK_APPLICATION_MK=./jni/Application.mk \
-            V=1 2>&1 | tail -80
+            NDK_APPLICATION_MK=./jni/Application.mk 2>&1 | tail -120
 
       - name: 收集产物
         run: |
-          mkdir -p app/src/main/libs/armeabi-v7a
+          set -eo pipefail
+          mkdir -p app/src/main/libs/armeabi-v7a app/src/main/assets app/src/main/cocos2dx-java
           cp work/proj.android/libs/armeabi-v7a/*.so app/src/main/libs/armeabi-v7a/
-          # cocos2d-x 的 Java 层
-          cp -r work/cocos2d-x-2.2.2/cocos2dx/platform/android/java/src/* app/src/main/cocos2dx-java/ 2>/dev/null || true
-          # 素材
-          mkdir -p app/src/main/assets
+          cp -r work/cocos2d-x-2.2.2/cocos2dx/platform/android/java/src/* app/src/main/cocos2dx-java/ || true
           cp -r work/Resources/* app/src/main/assets/
-          ls -la app/src/main/libs/armeabi-v7a | head
+          ls -la app/src/main/libs/armeabi-v7a
 
       - name: 安装 Gradle
         run: |
-          curl -L --retry 3 -o gradle.zip https://services.gradle.org/distributions/gradle-8.7-bin.zip
-          unzip -q gradle.zip -d ~/
+          set -eo pipefail
+          curl -fL --retry 5 --retry-all-errors -o gradle.zip https://services.gradle.org/distributions/gradle-8.7-bin.zip
+          unzip -q -o gradle.zip -d ~/
           echo "$HOME/gradle-8.7/bin" >> $GITHUB_PATH
 
       - name: 打包 APK
         run: |
-          set -e
-          gradle :app:assembleRelease --no-daemon -q 2>&1 | tail -60
-          ls -la app/build/outputs/apk/release/
+          set -eo pipefail
+          gradle :app:assembleRelease --no-daemon --stacktrace 2>&1 | tail -80
+          find app/build/outputs -name '*.apk' -exec ls -lh {} \;
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: apk
-          path: |
-            app/build/outputs/apk/release/*.apk
+          path: app/build/outputs/apk/release/*.apk
           if-no-files-found: warn
