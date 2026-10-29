@@ -222,6 +222,17 @@ jobs:
           ls -la libs/arm64-v8a/ >> $L 2>&1
           exit 0
 
+      - name: 修补 so 依赖
+        continue-on-error: true
+        run: |
+          set +e
+          L=~/build.log
+          for so in work/proj.android/libs/arm64-v8a/*.so; do
+            echo "--- $so" >> $L
+            python3 tools/patch_needed.py "$so" >> $L 2>&1
+          done
+          ~/android-ndk-r10e/toolchains/arm-linux-androideabi-4.9/prebuilt/linux-x86_64/bin/arm-linux-androideabi-readelf -d work/proj.android/libs/arm64-v8a/libcocos2dcpp.so 2>/dev/null | head -20 >> $L
+
       - name: 打包
         continue-on-error: true
         run: |
