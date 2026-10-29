@@ -12,75 +12,107 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 180
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: 缓存工具链
+      - name: 缓存
         uses: actions/cache@v4
         with:
           path: |
             ~/cocos2d-x-2.2.2
             ~/android-ndk-r10e
-            ~/thirdparty
-          key: ns-toolchain-v4
+            ~/tb
+          key: ns-v5
 
-      - name: 日志初始化
-        run: echo "=== build start ===" > ~/build.log
-
-      - name: cocos2d-x 2.2.2
+      - name: 初始化
         run: |
+          echo "=== start ===" > ~/build.log
           cd ~
           if [ ! -d cocos2d-x-2.2.2/cocos2dx ]; then
             curl -fL --retry 5 --retry-all-errors -o cocos.zip \
               https://github.com/LeaderOnePro/NarutoSenki/releases/download/v1.22/cocos2d-x-2.2.2.zip
             unzip -q -o cocos.zip
           fi
-          test -d ~/cocos2d-x-2.2.2/cocos2dx
-
-      - name: NDK r10e
-        run: |
-          cd ~
           if [ ! -x android-ndk-r10e/ndk-build ]; then
             curl -fL --retry 5 --retry-all-errors -o ndk.zip \
               https://dl.google.com/android/repository/android-ndk-r10e-linux-x86_64.zip
             unzip -q -o ndk.zip
             chmod +x android-ndk-r10e/ndk-build
           fi
-          ~/android-ndk-r10e/ndk-build --version | head -2
 
-      - name: 自制 arm64 预编译第三方库
+      - name: 预编译库清单
+        run: |
+          P=~/cocos2d-x-2.2.2/cocos2dx/platform/third_party/android/prebuilt
+          {
+            echo "@@@ LIBS"
+            for d in $P/*/; do
+              echo "$(basename $d): $(ls $d/libs 2>/dev/null | tr '\n' ' ')"
+            done
+            echo "@@@ TOOLCHAIN"
+            ls ~/android-ndk-r10e/toolchains/ | head
+            ls ~/android-ndk-r10e/platforms/ | tr '\n' ' '
+          } 2>&1 | tee -a ~/build.log
+
+      - name: 编译 arm64 第三方库
         run: |
           set -x
-          mkdir -p ~/thirdparty && cd ~/thirdparty
-          P=~/cocos2d-x-2.2.2/cocos2dx/platform/third_party/android/prebuilt
           NDK=~/android-ndk-r10e
-          export PATH=$NDK/toolchains/arm-linux-androideabi-4.9/prebuilt/linux-x86_64/bin:$PATH
+          TC=$NDK/toolchains/aarch64-linux-android-4.9/prebuilt/linux-x86_64/bin
+          export CC=$TC/aarch64-linux-android-gcc
+          export AR=$TC/aarch64-linux-android-ar
+          export RANLIB=$TC/aarch64-linux-android-ranlib
+          export CFLAGS="-O2 -fPIC --sysroot=$NDK/platforms/android-21/arch-arm64 -I$NDK/platforms/android-21/arch-arm64/usr/include"
+          export LDFLAGS="--sysroot=$NDK/platforms/android-21/arch-arm64"
+          export CHOST=aarch64-linux-android
+          export ac_cv_host=aarch64-linux-android
+          mkdir -p ~/tb && cd ~/tb
 
-          # ---------- zlib ----------
-          if [ ! -f zlib-arm64/libz.a ]; then
-            curl -fL --retry 3 -o zlib.tar.gz https://zlib.net/fossils/zlib-1.2.13.tar.gz || \
-            curl -fL --retry 3 -o zlib.tar.gz https://github.com/madler/zlib/releases/download/v1.2.13/zlib-1.2.13.tar.gz
-            tar xzf zlib.tar.gz
-            cd zlib-1.2.13
-            CC=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/clang
-            # NDK r10e 没有 llvm，用 gcc
-            CC=$NDK/toolchains/aarch64-linux-android-4.9/prebuilt/linux-x86_64/bin/aarch64-linux-android-gcc
-            CHOST=aarch64-linux-android CFLAGS="--sysroot=$NDK/platforms/android-21/arch-arm64" \
-              ./configure --static --prefix=$HOME/thirdparty/zlib-arm64
+          # ---- zlib ----
+          if [ ! -f ~/tb/zlib/lib/libz.a ]; then
+            curl -fL --retry 3 -o z.tgz https://zlib.net/fossils/zlib-1.2.13.tar.gz
+            tar xzf z.tgz && cd zlib-1.2.13
+            sed -i 's/^CFLAGS=.*/CFLAGS=-O2 -fPIC/' configure
+            ./configure --static --prefix=$HOME/tb/zlib
             make -j4 && make install
             cd ..
           fi
-          ls ~/thirdparty/zlib-arm64/lib 2>/dev/null | head
+          echo "zlib: $(ls ~/tb/zlib/lib 2>/dev/null)"
 
-      - name: 上报阶段1日志
+          # ---- libpng ----
+          if [ ! -f ~/tb/png/lib/libpng.a ]; then
+            curl -fL --retry 3 -o p.tgz https://download.sourceforge.net/libpng/libpng-1.6.40.tar.gz
+            tar xzf p.tgz && cd libpng-1.6.40
+            ./configure --host=aarch64-linux-android --enable-static --disable-shared \
+              --prefix=$HOME/tb/png CPPFLAGS="-I$HOME/tb/zlib/include" LDFLAGS="-L$HOME/tb/zlib/lib"
+            make -j4 && make install
+            cd ..
+          fi
+          echo "png: $(ls ~/tb/png/lib 2>/dev/null)"
+
+          # ---- libjpeg-turbo ----
+          if [ ! -f ~/tb/jpg/lib/libjpeg.a ]; then
+            curl -fL --retry 3 -o j.tgz https://download.sourceforge.net/libjpeg-turbo/libjpeg-turbo-1.5.3.tar.gz
+            tar xzf j.tgz && cd libjpeg-turbo-1.5.3
+            sed -i 's/^#define JPEG_LIB_VERSION.*//' jconfig.h.in 2>/dev/null || true
+            cmake -DCMAKE_C_COMPILER=$CC -DCMAKE_AR=$AR -DCMAKE_RANLIB=$RANLIB \
+              -DCMAKE_SYSTEM_NAME=Android -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
+              -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_INSTALL_PREFIX=$HOME/tb/jpg \
+              -DENABLE_SHARED=OFF -DENABLE_STATIC=ON -DWITH_TURBOJPEG=OFF -DWITH_JAVA=OFF . \
+              > ~/cmake.log 2>&1 || tail -20 ~/cmake.log
+            make -j4 && make install
+            cd ..
+          fi
+          echo "jpeg: $(ls ~/tb/jpg/lib 2>/dev/null)"
+          exit 0
+
+      - name: 上报
         if: always()
         run: |
-          { echo "@@@ ZLIB 构建"; tail -30 ~/build.log; } 
-          tail -c 4000 ~/build.log > /tmp/t.log
+          { head -c 3000 ~/build.log; echo; echo "......"; tail -c 30000 ~/build.log; } > /tmp/t.log
           BODY=$(python3 -c 'import json;print(json.dumps(open("/tmp/t.log",errors="replace").read()))')
           curl -sS -X POST -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github+json" -H "Content-Type: application/json" \
-            -d "{\"title\":\"log ${{ github.run_number }}-1\",\"body\":$BODY}" \
+            -d "{\"title\":\"log ${{ github.run_number }}\",\"body\":$BODY}" \
             https://api.github.com/repos/${{ github.repository }}/issues || true
