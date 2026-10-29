@@ -5,6 +5,10 @@ on:
   push:
     branches: [ main ]
 
+permissions:
+  contents: write
+  issues: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -134,7 +138,13 @@ jobs:
       - name: 打包 APK
         run: |
           set -eo pipefail
-          gradle :app:assembleRelease --no-daemon --stacktrace 2>&1 | tail -80
+          set +e
+          gradle :app:assembleRelease --no-daemon --stacktrace > ~/gradle.log 2>&1
+          rc=$?
+          tail -60 ~/gradle.log
+          cat ~/gradle.log >> ~/build.log
+          echo "rc=$rc"
+          exit $rc
           find app/build/outputs -name '*.apk' -exec ls -lh {} \;
 
       - uses: actions/upload-artifact@v4
