@@ -1,8 +1,17 @@
-/* 替身 tiffio.h：游戏不使用 TIFF，提供空实现让 cocos2d-x 编译通过 */
+/* 替身 tiffio.h：游戏不使用 TIFF，提供类型与空实现让 cocos2d-x 编译通过 */
 #ifndef STUB_TIFFIO_H
 #define STUB_TIFFIO_H
 #include <stdint.h>
 #include <stdlib.h>
+
+typedef uint8_t   uint8;
+typedef uint16_t  uint16;
+typedef uint32_t  uint32;
+typedef uint64_t  uint64;
+typedef int8_t    int8;
+typedef int16_t   int16;
+typedef int32_t   int32;
+typedef int64_t   int64;
 
 typedef void*      thandle_t;
 typedef uint64_t   toff_t;
@@ -30,6 +39,6 @@ static inline TIFF* TIFFClientOpen(const char*, const char*, thandle_t,
 static inline int  TIFFGetField(TIFF*, ttag_t, ...) { return 0; }
 static inline void* _TIFFmalloc(tmsize_t) { return 0; }
 static inline void _TIFFfree(void*) {}
-static inline int  TIFFReadRGBAImageOriented(TIFF*, uint32_t, uint32_t, uint32_t*, int, int) { return 0; }
+static inline int  TIFFReadRGBAImageOriented(TIFF*, uint32, uint32, uint32*, int, int) { return 0; }
 static inline void TIFFClose(TIFF*) {}
 #endif
