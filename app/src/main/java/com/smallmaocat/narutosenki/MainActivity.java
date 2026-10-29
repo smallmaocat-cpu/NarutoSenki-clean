@@ -21,12 +21,22 @@ public class MainActivity extends Cocos2dxActivity {
         Thread.setDefaultUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
             @Override
             public void uncaughtException(Thread thread, Throwable ex) {
-                dump("UNCAUGHT on " + thread.getName(), ex);
+                dump("UNCAUGHT " + thread.getName(), ex);
                 android.os.Process.killProcess(android.os.Process.myPid());
                 System.exit(10);
             }
         });
+
         write("=== onCreate start ===");
+
+        // 先自己加载一遍，把失败原因记下来（cocos2d-x 自带的是静默吞异常）
+        try {
+            System.loadLibrary("cocos2dcpp");
+            write("System.loadLibrary(cocos2dcpp) OK");
+        } catch (Throwable t) {
+            dump("loadLibrary FAILED", t);
+        }
+
         try {
             super.onCreate(savedInstanceState);
             write("=== onCreate done ===");
@@ -47,8 +57,6 @@ public class MainActivity extends Cocos2dxActivity {
         PrintWriter pw = new PrintWriter(sw);
         pw.println("========== " + stage + " ==========");
         pw.println("time: " + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(new Date()));
-        pw.println("device: " + android.os.Build.MANUFACTURER + " " + android.os.Build.MODEL);
-        pw.println("android: " + android.os.Build.VERSION.RELEASE + " API" + android.os.Build.VERSION.SDK_INT);
         pw.println("abis: " + java.util.Arrays.toString(android.os.Build.SUPPORTED_ABIS));
         pw.println();
         t.printStackTrace(pw);
