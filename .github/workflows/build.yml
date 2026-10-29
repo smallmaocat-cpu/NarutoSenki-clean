@@ -74,28 +74,19 @@ jobs:
           fi
           echo "png -> $(ls png/lib 2>/dev/null | tr '\n' ' ')" >> $L
 
-          echo "@@@ libjpeg" >> $L
+          echo "@@@ libjpeg(9d)" >> $L
           if [ ! -f jpg/lib/libjpeg.a ]; then
-            rm -rf libjpeg-turbo-1.5.3 jpg jb
-            [ -f j.tgz ] || curl -fsSL --retry 3 -o j.tgz https://github.com/libjpeg-turbo/libjpeg-turbo/archive/refs/tags/1.5.3.tar.gz
-            tar xzf j.tgz
-            mkdir -p jb && cd jb
-            cmake ../libjpeg-turbo-1.5.3 \
-              -DCMAKE_C_COMPILER=$CC -DCMAKE_AR=$AR -DCMAKE_RANLIB=$RANLIB \
-              -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
-              -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY \
-              -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_EXE_LINKER_FLAGS="$LDFLAGS" \
-              -DCMAKE_INSTALL_PREFIX=$HOME/tb/jpg \
-              -DENABLE_SHARED=OFF -DENABLE_STATIC=ON -DWITH_TURBOJPEG=OFF \
-              -DWITH_JAVA=OFF -DWITH_SIMD=OFF -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
-              > ~/j.log 2>&1
-            echo "cmake_rc=$?" >> $L
+            rm -rf jpeg-9d jpg
+            [ -f j9.tar.gz ] || curl -fsSL --retry 3 -o j9.tar.gz https://www.ijg.org/files/jpegsrc.v9d.tar.gz
+            tar xzf j9.tar.gz
+            cd jpeg-9d
+            ./configure --host=aarch64-linux-android --enable-static --disable-shared \
+              --prefix=$HOME/tb/jpg \
+              CPPFLAGS="$SR" LDFLAGS="$SR" > ~/j.log 2>&1
             make -j4 >> ~/j.log 2>&1
-            echo "make_rc=$?" >> $L
             make install >> ~/j.log 2>&1
-            echo "install_rc=$?" >> $L
             cd ..
-            tail -25 ~/j.log >> $L
+            tail -12 ~/j.log >> $L
           fi
           echo "jpeg -> $(ls jpg/lib 2>/dev/null | tr '\n' ' ')" >> $L
 
@@ -114,7 +105,9 @@ jobs:
           exit 0
 
       - name: 组装
+        continue-on-error: true
         run: |
+          set +e
           L=~/build.log
           echo "@@@ assemble" >> $L
           mkdir -p ~/upstream
@@ -137,20 +130,26 @@ jobs:
           echo "classes=$(find work/Classes -type f | wc -l)" >> $L
 
       - name: ndk-build
+        continue-on-error: true
         run: |
+          set +e
           L=~/build.log
           cd work/proj.android
           export NDK_MODULE_PATH=$HOME/cocos2d-x-2.2.2:$HOME/cocos2d-x-2.2.2/cocos2dx/platform/third_party/android/prebuilt
           ~/android-ndk-r10e/ndk-build -j4 NDK_PROJECT_PATH=. \
             APP_BUILD_SCRIPT=./jni/Android.mk NDK_APPLICATION_MK=./jni/Application.mk \
             > ~/ndk.log 2>&1
-          echo "ndk_rc=$?" >> $L
-          grep -E "error:|undefined reference|\*\*\*|Install *:" ~/ndk.log | head -40 >> $L
+          rc=$?
+          echo "ndk_rc=$rc" >> $L
+          grep -E "error:|undefined reference|\*\*\*|Install *:" ~/ndk.log | head -50 >> $L
+          tail -15 ~/ndk.log >> $L
           ls -la libs/arm64-v8a/ >> $L 2>&1
           exit 0
 
       - name: 打包
+        continue-on-error: true
         run: |
+          set +e
           L=~/build.log
           echo "@@@ package" >> $L
           mkdir -p app/src/main/libs/arm64-v8a app/src/main/assets app/src/main/cocos2dx-java
