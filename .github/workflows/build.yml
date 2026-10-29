@@ -90,12 +90,36 @@ jobs:
           fi
           echo "jpeg -> $(ls jpg/lib 2>/dev/null | tr '\n' ' ')" >> $L
 
+          echo "@@@ libcurl(静态,无ssl)" >> $L
+          if [ ! -f cur/lib/libcurl.a ]; then
+            rm -rf curl-7.68.0 cur
+            [ -f c.tgz ] || curl -fsSL --retry 3 -o c.tgz https://github.com/curl/curl/releases/download/curl-7_68_0/curl-7.68.0.tar.gz
+            tar xzf c.tgz
+            cd curl-7.68.0
+            ./configure --host=aarch64-linux-android --disable-shared --enable-static \
+              --without-ssl --without-zlib --without-libidn2 --without-libssh2 \
+              --without-librtmp --disable-ftp --disable-file --disable-ldap \
+              --disable-rtsp --disable-dict --disable-telnet --disable-tftp \
+              --disable-pop3 --disable-imap --disable-smtp --disable-gopher \
+              --disable-manual --disable-threaded-resolver --disable-ntlm-wb \
+              --prefix=$HOME/tb/cur \
+              CPPFLAGS="$SR" LDFLAGS="$SR" > ~/c.log 2>&1
+            make -j4 >> ~/c.log 2>&1
+            make install >> ~/c.log 2>&1
+            cd ..
+            tail -12 ~/c.log >> $L
+          fi
+          echo "curl -> $(ls cur/lib 2>/dev/null | tr '\n' ' ')" >> $L
+
           echo "@@@ install" >> $L
           P=~/cocos2d-x-2.2.2/cocos2dx/platform/third_party/android/prebuilt
           mkdir -p $P/libpng/libs/arm64-v8a $P/libjpeg/libs/arm64-v8a
           cp ~/tb/png/lib/libpng*.a $P/libpng/libs/arm64-v8a/ 2>/dev/null
           cp ~/tb/jpg/lib/libjpeg.a  $P/libjpeg/libs/arm64-v8a/ 2>/dev/null
           cp ~/tb/zlib/lib/libz.a    $P/libpng/libs/arm64-v8a/ 2>/dev/null
+          mkdir -p $P/libcurl/libs/arm64-v8a
+          cp ~/tb/cur/lib/libcurl.a  $P/libcurl/libs/arm64-v8a/ 2>/dev/null
+          mkdir -p $P/libxml2/libs/arm64-v8a
           ls $P/libpng/libs/arm64-v8a $P/libjpeg/libs/arm64-v8a >> $L 2>&1
 
           echo "@@@ 去掉 tiff/webp" >> $L
