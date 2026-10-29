@@ -9,8 +9,8 @@ android {
         minSdk 21
         targetSdk 34
         versionCode 1
-        versionName "1.22-clean"
-        ndk { abiFilters 'armeabi-v7a' }
+        versionName "1.22-clean-arm64"
+        ndk { abiFilters 'arm64-v8a' }
     }
 
     sourceSets {
