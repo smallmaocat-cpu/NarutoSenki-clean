@@ -161,6 +161,28 @@ jobs:
           done
           echo "classes=$(find work/Classes -type f | wc -l)" >> $L
 
+      - name: 修补 cocos2d 源码
+        continue-on-error: true
+        run: |
+          set +e
+          L=~/build.log
+          C=~/cocos2d-x-2.2.2
+          echo "@@@ patch cocos2d" >> $L
+          # 1) curlrules.h 的 32 位尺寸断言
+          sed -i 's|\[CurlchkszEQ(long, CURL_SIZEOF_LONG)\]|[1]|g' $C/cocos2dx/platform/third_party/android/prebuilt/libcurl/include/curl/curlrules.h
+          sed -i 's|^#define CurlchkszEQ.*|#define CurlchkszEQ(t, s) 1|g' $C/cocos2dx/platform/third_party/android/prebuilt/libcurl/include/curl/curlrules.h
+          sed -i 's|^#define CurlchkszGE.*|#define CurlchkszGE(t1, t2) 1|g' $C/cocos2dx/platform/third_party/android/prebuilt/libcurl/include/curl/curlrules.h
+          grep -n "Curlchksz" $C/cocos2dx/platform/third_party/android/prebuilt/libcurl/include/curl/curlrules.h | head -6 >> $L
+
+          # 2) 去掉 tiff/webp/websockets 引用（含 extensions）
+          sed -i '/cocos_libtiff_static/d;/cocos_libwebp_static/d;/import-module,libtiff/d;/import-module,libwebp/d' $C/cocos2dx/Android.mk
+          sed -i '/websockets/d' $C/cocos2dx/Android.mk
+          sed -i '/websockets/d' $C/extensions/Android.mk
+          echo "--- after patch ---" >> $L
+          grep -n "STATIC_LIBRARIES\|import-module" $C/cocos2dx/Android.mk >> $L
+          grep -n "STATIC_LIBRARIES\|import-module" $C/extensions/Android.mk >> $L
+          exit 0
+
       - name: ndk-build
         continue-on-error: true
         run: |
