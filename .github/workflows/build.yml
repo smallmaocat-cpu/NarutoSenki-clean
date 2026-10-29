@@ -78,18 +78,30 @@ jobs:
 
       - name: 预编译库架构普查
         run: |
+          set +e
           P=~/cocos2d-x-2.2.2/cocos2dx/platform/third_party/android/prebuilt
-          echo "== prebuilt 目录 =="
-          ls $P
-          echo ""
-          for d in $P/*/; do
-            n=$(basename $d)
-            abis=$(ls $d/libs 2>/dev/null | tr '\n' ' ')
-            echo "$n -> [$abis]"
-          done
-          echo ""
-          echo "== cocos2dx 里 import-module 预编译库的地方 =="
-          grep -rn "import-module.*third_party" ~/cocos2d-x-2.2.2 --include=Android.mk | head -20
+          {
+            echo "===== prebuilt 目录 ====="
+            ls $P
+            echo ""
+            for d in $P/*/; do
+              n=$(basename $d)
+              abis=$(ls $d/libs 2>/dev/null | tr '\n' ' ')
+              echo "$n -> [$abis]"
+            done
+            echo ""
+            echo "===== cocos2dx 中引用预编译库的 Android.mk ====="
+            grep -rn "import-module\|LOCAL_SRC_FILES.*prebuilt\|\.a$" \
+              ~/cocos2d-x-2.2.2/cocos2dx --include=Android.mk | head -40
+            echo ""
+            echo "===== 各 Android.mk 是否按 TARGET_ARCH_ABI 分支 ====="
+            grep -rln "arm64\|TARGET_ARCH_ABI" \
+              ~/cocos2d-x-2.2.2/cocos2dx --include=Android.mk
+            echo ""
+            echo "===== libjpeg 目录内容 ====="
+            find $P/libjpeg -maxdepth 3 | head -20
+          } 2>&1 | tee -a ~/build.log
+          exit 0
 
       - name: ndk-build
         continue-on-error: true
@@ -100,9 +112,11 @@ jobs:
           ~/android-ndk-r10e/ndk-build -j4 \
             NDK_PROJECT_PATH=. APP_BUILD_SCRIPT=./jni/Android.mk \
             NDK_APPLICATION_MK=./jni/Application.mk > ~/build.log 2>&1
-          echo "ndk_rc=$?"
-          grep -E "(error|Error|Install)" ~/build.log | tail -15
-          echo "---"
+          rc=$?
+          echo "ndk_rc=$rc"
+          tail -40 ~/build.log
+          echo "NDK_BUILD_RC=$rc" >> ~/build.log
+          exit 0
 
       - name: 收集产物
         continue-on-error: true
