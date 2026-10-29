@@ -168,56 +168,48 @@ jobs:
           L=~/build.log
           C=~/cocos2d-x-2.2.2
           echo "@@@ patch cocos2d" >> $L
-          # 1) curlrules.h 的 32 位尺寸断言
-          sed -i 's|\[CurlchkszEQ(long, CURL_SIZEOF_LONG)\]|[1]|g' $C/cocos2dx/platform/third_party/android/prebuilt/libcurl/include/curl/curlrules.h
-          sed -i 's|^#define CurlchkszEQ.*|#define CurlchkszEQ(t, s) 1|g' $C/cocos2dx/platform/third_party/android/prebuilt/libcurl/include/curl/curlrules.h
-          sed -i 's|^#define CurlchkszGE.*|#define CurlchkszGE(t1, t2) 1|g' $C/cocos2dx/platform/third_party/android/prebuilt/libcurl/include/curl/curlrules.h
-          grep -n "Curlchksz" $C/cocos2dx/platform/third_party/android/prebuilt/libcurl/include/curl/curlrules.h | head -6 >> $L
 
-          # 2) 去掉 tiff/webp/websockets 引用（含 extensions）
+          # ---- 1) curlrules.h 32位断言 ----
+          CR=$C/cocos2dx/platform/third_party/android/prebuilt/libcurl/include/curl/curlrules.h
+          sed -i 's|^#define CurlchkszEQ.*|#define CurlchkszEQ(t, s) 1|g' $CR
+          sed -i 's|^#define CurlchkszGE.*|#define CurlchkszGE(t1, t2) 1|g' $CR
+          sed -i 's|\[CurlchkszEQ(long, CURL_SIZEOF_LONG)\]|[1]|g' $CR
+
+          # ---- 2) 移除 tiff/webp/websockets 库 ----
           sed -i '/cocos_libtiff_static/d;/cocos_libwebp_static/d;/import-module,libtiff/d;/import-module,libwebp/d' $C/cocos2dx/Android.mk
           sed -i '/websockets/d' $C/cocos2dx/Android.mk
-          sed -i '/websockets/d' $C/extensions/Android.mk
-          # 3) 彻底移除 WebSocket（依赖已删除的 libwebsockets）
-          sed -i '/WebSocket/d' $C/extensions/Android.mk
+          sed -i '/websockets/d;/WebSocket/d' $C/extensions/Android.mk
           rm -f $C/extensions/network/WebSocket.cpp $C/extensions/network/WebSocket.h
-          # 4) 移除 webp 图片解码（已删 libwebp 库）
           rm -f $C/cocos2dx/platform/CCImageCommonWebp.cpp
-          sed -i '/CCImageCommonWebp/d;/CCImageWebp/d' $C/cocos2dx/Android.mk
-          # 若 CCImage.cpp 里仍引用 webp 分支，也一并去掉
-          grep -n "Webp" $C/cocos2dx/platform/CCImage.cpp >> $L 2>&1 | head -5
-          # 5) 关掉 tiff / webp 的包含与实现
-          sed -i '/#include "tiffio.h"/d;/#include "decode.h"/d;/#include "webp\//d' \
-            $C/cocos2dx/platform/CCImageCommon_cpp.h
-          grep -n "CC_USE_TIFF\|CC_USE_WEBP" $C/cocos2dx/platform/CCImageCommon_cpp.h | head -10 >> $L
-          sed -i 's|#define CC_USE_WEBP||g' $C/cocos2dx/platform/CCImageCommon_cpp.h
-          sed -i 's|#define CC_USE_TIFF||g' $C/cocos2dx/platform/CCImageCommon_cpp.h
-          # 6) 用 macro 关掉 tiff/webp 分支（CCImageCommon_cpp.h 用 #ifdef 判断）
+          sed -i '/CCImageCommonWebp/d' $C/cocos2dx/Android.mk
+
+          # ---- 3) CCImageCommon_cpp.h：去掉 tiff 头 + 用 #if 0 包住 tiff 实现 ----
           H=$C/cocos2dx/platform/CCImageCommon_cpp.h
-          sed -i '1i #undef CC_USE_TIFF\n#undef CC_USE_WEBP' $H
-          # 再把 _tiffXXX 相关函数整体包进 #if 0
+          sed -i '/#include "tiffio.h"/d' $H
           python3 - "$H" <<'PYEOF'
-import sys,re
+import sys
 p=sys.argv[1]
-s=open(p,encoding='utf-8',errors='replace').read()
-# tiff 相关的静态函数块：从第一个 "static tmsize_t" 或 "_tiffReadProc" 到下一个 "// PNG" 之前
-start=None
-for pat in ["static tmsize_t _tiffReadProc","static tmsize_t","_tiffReadProc"]:
-    i=s.find(pat)
-    if i>0: start=i; break
-if start:
-    end=s.find("//////////////////////////////////////////////////////////////////////////", start)
-    if end<0: end=start+12000
-    s=s[:start]+"#if 0\n"+s[start:end]+"\n#endif\n"+s[end:]
-open(p,'w',encoding='utf-8').write(s)
-print("patched", bool(start))
+src=open(p,encoding='utf-8',errors='replace').read().splitlines(True)
+# tiff 实现：从 "static tmsize_t _tiffReadProc" 到 "_initWithTiffData" 函数结束（含）
+try:
+    a=next(i for i,l in enumerate(src) if '_tiffReadProc' in l and 'static' in l)
+    b=next(i for i,l in enumerate(src) if '_initWithRawData' in l)
+except StopIteration:
+    print("PATTERN-NOT-FOUND"); raise SystemExit
+out=src[:a]+["#if 0\n"]+src[a:b]+["#endif\n"]+src[b:]
+open(p,'w',encoding='utf-8').write("".join(out))
+print(f"TIFF-BLOCK-DISABLED {a+1}-{b}")
 PYEOF
-          grep -n "CC_USE_TIFF\|CC_USE_WEBP\|#if 0" $H | head -10 >> $L
-          echo "WebSocket removed" >> $L
-          grep -c "cpp" $C/extensions/Android.mk >> $L
+          echo "tiff done" >> $L
+
+          # ---- 4) CCImage.cpp 里的 tiff/webp 分支改为不支持 ----
+          I=$C/cocos2dx/platform/android/CCImage.cpp
+          sed -i 's|bRet = _initWithTiffData(pData, nDataLen);|bRet = false;|g' $I
+          sed -i 's|bRet = _initWithWebpData(pData, nDataLen);|bRet = false;|g' $I
+          grep -n "_initWithTiffData\|_initWithWebpData" $I >> $L
+
           echo "--- after patch ---" >> $L
           grep -n "STATIC_LIBRARIES\|import-module" $C/cocos2dx/Android.mk >> $L
-          grep -n "STATIC_LIBRARIES\|import-module" $C/extensions/Android.mk >> $L
           exit 0
 
       - name: ndk-build
