@@ -178,6 +178,11 @@ jobs:
           sed -i '/cocos_libtiff_static/d;/cocos_libwebp_static/d;/import-module,libtiff/d;/import-module,libwebp/d' $C/cocos2dx/Android.mk
           sed -i '/websockets/d' $C/cocos2dx/Android.mk
           sed -i '/websockets/d' $C/extensions/Android.mk
+          # 3) 彻底移除 WebSocket（依赖已删除的 libwebsockets）
+          sed -i '/WebSocket/d' $C/extensions/Android.mk
+          rm -f $C/extensions/network/WebSocket.cpp $C/extensions/network/WebSocket.h
+          echo "WebSocket removed" >> $L
+          grep -c "cpp" $C/extensions/Android.mk >> $L
           echo "--- after patch ---" >> $L
           grep -n "STATIC_LIBRARIES\|import-module" $C/cocos2dx/Android.mk >> $L
           grep -n "STATIC_LIBRARIES\|import-module" $C/extensions/Android.mk >> $L
