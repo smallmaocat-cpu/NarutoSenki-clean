@@ -159,6 +159,9 @@ jobs:
           while IFS= read -r -d '' f; do
             iconv -f UTF-8 -t UTF-8 "$f" >/dev/null 2>&1 || { iconv -f GBK -t UTF-8 "$f" -o "$f.tmp" && mv "$f.tmp" "$f"; }
           done
+          # 替身 tiffio.h 放进 Classes，按引号包含会被优先找到
+          cp tools/tiffio.h work/Classes/tiffio.h
+          cp tools/decode.h  work/Classes/decode.h
           echo "classes=$(find work/Classes -type f | wc -l)" >> $L
 
       - name: 修补 cocos2d 源码
@@ -185,15 +188,10 @@ jobs:
 
           # ---- 3) CCImageCommon_cpp.h：去掉 tiff 头 + 用 #if 0 包住 tiff 实现 ----
           H=$C/cocos2dx/platform/CCImageCommon_cpp.h
-          sed -i '/#include "tiffio.h"/d' $H
-          python3 tools/patch_tiff.py "$H"
           echo "tiff done" >> $L
 
           # ---- 4) CCImage.cpp 里的 tiff/webp 分支改为不支持 ----
           I=$C/cocos2dx/platform/android/CCImage.cpp
-          sed -i 's|bRet = _initWithTiffData(pData, nDataLen);|bRet = false;|g' $I
-          sed -i 's|bRet = _initWithWebpData(pData, nDataLen);|bRet = false;|g' $I
-          grep -n "_initWithTiffData\|_initWithWebpData" $I >> $L
 
           echo "--- after patch ---" >> $L
           grep -n "STATIC_LIBRARIES\|import-module" $C/cocos2dx/Android.mk >> $L
