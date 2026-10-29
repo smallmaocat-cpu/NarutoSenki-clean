@@ -81,26 +81,19 @@ jobs:
           set +e
           P=~/cocos2d-x-2.2.2/cocos2dx/platform/third_party/android/prebuilt
           {
-            echo "===== prebuilt 目录 ====="
-            ls $P
-            echo ""
-            for d in $P/*/; do
-              n=$(basename $d)
-              abis=$(ls $d/libs 2>/dev/null | tr '\n' ' ')
-              echo "$n -> [$abis]"
+            echo "@@@ PROBE START"
+            for lib in $P/*/; do
+              n=$(basename $lib)
+              line="$n:"
+              for abi in armeabi armeabi-v7a arm64-v8a x86 mips; do
+                if ls $lib/libs/$abi/*.a >/dev/null 2>&1; then line="$line $abi=Y"; else line="$line $abi=-"; fi
+              done
+              echo "$line"
             done
-            echo ""
-            echo "===== cocos2dx 中引用预编译库的 Android.mk ====="
-            grep -rn "import-module\|LOCAL_SRC_FILES.*prebuilt\|\.a$" \
-              ~/cocos2d-x-2.2.2/cocos2dx --include=Android.mk | head -40
-            echo ""
-            echo "===== 各 Android.mk 是否按 TARGET_ARCH_ABI 分支 ====="
-            grep -rln "arm64\|TARGET_ARCH_ABI" \
-              ~/cocos2d-x-2.2.2/cocos2dx --include=Android.mk
-            echo ""
-            echo "===== libjpeg 目录内容 ====="
-            find $P/libjpeg -maxdepth 3 | head -20
-          } 2>&1 | tee -a ~/build.log
+            echo "@@@ PROBE END"
+          } > ~/probe.txt 2>&1
+          cat ~/probe.txt
+          cp ~/probe.txt ~/build.log
           exit 0
 
       - name: ndk-build
@@ -178,7 +171,7 @@ jobs:
       - name: 回传日志
         if: always()
         run: |
-          tail -c 55000 ~/build.log > /tmp/tail.log 2>/dev/null || true
+          { head -c 6000 ~/build.log; echo; echo "......[中间省略]......"; tail -c 45000 ~/build.log; } > /tmp/tail.log 2>/dev/null || true
           BODY=$(python3 -c 'import json,sys;print(json.dumps(open("/tmp/tail.log",errors="replace").read()))')
           curl -sS -X POST \
             -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
