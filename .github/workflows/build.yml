@@ -80,13 +80,30 @@ jobs:
           find work/Classes -type f | wc -l
 
       - name: ndk-build
+        id: ndk
+        continue-on-error: true
         run: |
-          set -eo pipefail
           cd work/proj.android
+          set +e
           ~/android-ndk-r10e/ndk-build -j4 \
             NDK_PROJECT_PATH=. \
             APP_BUILD_SCRIPT=./jni/Android.mk \
-            NDK_APPLICATION_MK=./jni/Application.mk 2>&1 | tail -120
+            NDK_APPLICATION_MK=./jni/Application.mk > ~/build.log 2>&1
+          rc=$?
+          echo "rc=$rc"
+          tail -60 ~/build.log
+          exit $rc
+
+      - name: 回传编译日志
+        if: always()
+        run: |
+          set +e
+          tail -c 150000 ~/build.log > build.log
+          git config user.name  "ci"
+          git config user.email "ci@local"
+          git add -f build.log
+          git commit -m "ci: build log [skip ci]"
+          git push
 
       - name: 收集产物
         run: |
