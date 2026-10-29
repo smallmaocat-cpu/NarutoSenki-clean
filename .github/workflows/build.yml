@@ -160,6 +160,10 @@ jobs:
             iconv -f UTF-8 -t UTF-8 "$f" >/dev/null 2>&1 || { iconv -f GBK -t UTF-8 "$f" -o "$f.tmp" && mv "$f.tmp" "$f"; }
           done
           # 替身 tiffio.h 放进 Classes，按引号包含会被优先找到
+          # 替身头文件放到 cocos2d 源码同目录（引号包含优先本级目录）
+          cp tools/tiffio.h ~/cocos2d-x-2.2.2/cocos2dx/platform/tiffio.h
+          cp tools/decode.h ~/cocos2d-x-2.2.2/cocos2dx/platform/decode.h
+          cp tools/decode.h ~/cocos2d-x-2.2.2/cocos2dx/platform/android/decode.h
           cp tools/tiffio.h work/Classes/tiffio.h
           cp tools/decode.h  work/Classes/decode.h
           echo "classes=$(find work/Classes -type f | wc -l)" >> $L
