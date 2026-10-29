@@ -1,5 +1,6 @@
 /* webp 空实现：本项目不使用 webp，仅为满足链接 */
-#include "CCImage.h"
+#include "cocos2d.h"
+#include "platform/CCImage.h"
 
 NS_CC_BEGIN
 
