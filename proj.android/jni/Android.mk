@@ -8,7 +8,7 @@ LOCAL_MODULE_FILENAME := libcocos2dcpp
 LOCAL_SRC_FILES := hellocpp/main.cpp \
             ../../Classes/ActionButton.cpp \
             ../../Classes/ActionManager.cpp \
-            AppDelegate.cpp \
+            hellocpp/AppDelegate.cpp \
             ../../Classes/BGLayer.cpp \
             ../../Classes/Characters.cpp \
             ../../Classes/CreditsLayer.cpp \
