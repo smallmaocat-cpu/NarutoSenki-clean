@@ -186,20 +186,7 @@ jobs:
           # ---- 3) CCImageCommon_cpp.h：去掉 tiff 头 + 用 #if 0 包住 tiff 实现 ----
           H=$C/cocos2dx/platform/CCImageCommon_cpp.h
           sed -i '/#include "tiffio.h"/d' $H
-          python3 - "$H" <<'PYEOF'
-import sys
-p=sys.argv[1]
-src=open(p,encoding='utf-8',errors='replace').read().splitlines(True)
-# tiff 实现：从 "static tmsize_t _tiffReadProc" 到 "_initWithTiffData" 函数结束（含）
-try:
-    a=next(i for i,l in enumerate(src) if '_tiffReadProc' in l and 'static' in l)
-    b=next(i for i,l in enumerate(src) if '_initWithRawData' in l)
-except StopIteration:
-    print("PATTERN-NOT-FOUND"); raise SystemExit
-out=src[:a]+["#if 0\n"]+src[a:b]+["#endif\n"]+src[b:]
-open(p,'w',encoding='utf-8').write("".join(out))
-print(f"TIFF-BLOCK-DISABLED {a+1}-{b}")
-PYEOF
+          python3 tools/patch_tiff.py "$H"
           echo "tiff done" >> $L
 
           # ---- 4) CCImage.cpp 里的 tiff/webp 分支改为不支持 ----
