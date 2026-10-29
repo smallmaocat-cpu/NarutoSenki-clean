@@ -166,6 +166,10 @@ jobs:
           cp tools/decode.h ~/cocos2d-x-2.2.2/cocos2dx/platform/android/decode.h
           cp tools/tiffio.h work/Classes/tiffio.h
           cp tools/decode.h  work/Classes/decode.h
+          # webp 空实现加入编译
+          cp tools/webp_stub.cpp work/Classes/webp_stub.cpp
+          sed -i 's|../../Classes/StartMenu.cpp|../../Classes/StartMenu.cpp \\\n            ../../Classes/webp_stub.cpp|' work/proj.android/jni/Android.mk
+          grep -n "webp_stub" work/proj.android/jni/Android.mk >> $L
           echo "classes=$(find work/Classes -type f | wc -l)" >> $L
 
       - name: 修补 cocos2d 源码
