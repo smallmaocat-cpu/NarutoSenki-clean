@@ -17,15 +17,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Cache cocos + ndk
+      - name: 缓存工具链
         uses: actions/cache@v4
         with:
           path: |
             ~/cocos2d-x-2.2.2
             ~/android-ndk-r10e
-          key: ns-toolchain-v3
+            ~/thirdparty
+          key: ns-toolchain-v4
 
-      - name: 下载 cocos2d-x 2.2.2
+      - name: 日志初始化
+        run: echo "=== build start ===" > ~/build.log
+
+      - name: cocos2d-x 2.2.2
         run: |
           cd ~
           if [ ! -d cocos2d-x-2.2.2/cocos2dx ]; then
@@ -33,9 +37,9 @@ jobs:
               https://github.com/LeaderOnePro/NarutoSenki/releases/download/v1.22/cocos2d-x-2.2.2.zip
             unzip -q -o cocos.zip
           fi
-          test -d ~/cocos2d-x-2.2.2/cocos2dx && echo cocos-ok
+          test -d ~/cocos2d-x-2.2.2/cocos2dx
 
-      - name: 下载 NDK r10e
+      - name: NDK r10e
         run: |
           cd ~
           if [ ! -x android-ndk-r10e/ndk-build ]; then
@@ -44,138 +48,39 @@ jobs:
             unzip -q -o ndk.zip
             chmod +x android-ndk-r10e/ndk-build
           fi
-          ~/android-ndk-r10e/ndk-build --version
+          ~/android-ndk-r10e/ndk-build --version | head -2
 
-      - name: 下载上游游戏源码
+      - name: 自制 arm64 预编译第三方库
         run: |
-          mkdir -p ~/upstream
-          if [ ! -f ~/upstream/.ok ]; then
-            rm -rf ~/upstream/NarutoSenki ~/upstream/src.tar.gz
-            curl -fL --retry 8 --retry-all-errors -o ~/upstream/src.tar.gz \
-              https://codeload.github.com/LeaderOnePro/NarutoSenki/tar.gz/refs/tags/v1.22
-            tar tzf ~/upstream/src.tar.gz > /dev/null
-            mkdir -p ~/upstream/NarutoSenki
-            tar xzf ~/upstream/src.tar.gz -C ~/upstream/NarutoSenki --strip-components=1
-            test -f ~/upstream/NarutoSenki/Classes/GameLayer.cpp
-            touch ~/upstream/.ok
-          fi
-          ls ~/upstream/NarutoSenki/Classes | wc -l
-
-      - name: 组装工程
-        run: |
-          rm -rf work && mkdir -p work
-          cp -r ~/upstream/NarutoSenki/Classes  work/Classes
-          cp -r ~/upstream/NarutoSenki/Resources work/Resources
-          cp -r proj.android work/proj.android
-          ln -s ~/cocos2d-x-2.2.2 work/cocos2d-x-2.2.2
-          find work/Classes -type f \( -name '*.cpp' -o -name '*.h' \) -print0 |
-          while IFS= read -r -d '' f; do
-            if ! iconv -f UTF-8 -t UTF-8 "$f" >/dev/null 2>&1; then
-              iconv -f GBK -t UTF-8 "$f" -o "$f.tmp" && mv "$f.tmp" "$f"
-            fi
-          done
-          find work/Classes -type f | wc -l
-
-      - name: 预编译库架构普查
-        run: |
-          set +e
+          set -x
+          mkdir -p ~/thirdparty && cd ~/thirdparty
           P=~/cocos2d-x-2.2.2/cocos2dx/platform/third_party/android/prebuilt
-          {
-            echo "@@@ PROBE START"
-            for lib in $P/*/; do
-              n=$(basename $lib)
-              line="$n:"
-              for abi in armeabi armeabi-v7a arm64-v8a x86 mips; do
-                if ls $lib/libs/$abi/*.a >/dev/null 2>&1; then line="$line $abi=Y"; else line="$line $abi=-"; fi
-              done
-              echo "$line"
-            done
-            echo "@@@ PROBE END"
-          } > ~/probe.txt 2>&1
-          cat ~/probe.txt
-          cp ~/probe.txt ~/build.log
-          exit 0
+          NDK=~/android-ndk-r10e
+          export PATH=$NDK/toolchains/arm-linux-androideabi-4.9/prebuilt/linux-x86_64/bin:$PATH
 
-      - name: ndk-build
-        continue-on-error: true
-        run: |
-          cd work/proj.android
-          export NDK_MODULE_PATH=$HOME/cocos2d-x-2.2.2:$HOME/cocos2d-x-2.2.2/cocos2dx/platform/third_party/android/prebuilt
-          set +e
-          ~/android-ndk-r10e/ndk-build -j4 \
-            NDK_PROJECT_PATH=. APP_BUILD_SCRIPT=./jni/Android.mk \
-            NDK_APPLICATION_MK=./jni/Application.mk > ~/build.log 2>&1
-          rc=$?
-          echo "ndk_rc=$rc"
-          tail -40 ~/build.log
-          echo "NDK_BUILD_RC=$rc" >> ~/build.log
-          exit 0
+          # ---------- zlib ----------
+          if [ ! -f zlib-arm64/libz.a ]; then
+            curl -fL --retry 3 -o zlib.tar.gz https://zlib.net/fossils/zlib-1.2.13.tar.gz || \
+            curl -fL --retry 3 -o zlib.tar.gz https://github.com/madler/zlib/releases/download/v1.2.13/zlib-1.2.13.tar.gz
+            tar xzf zlib.tar.gz
+            cd zlib-1.2.13
+            CC=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/clang
+            # NDK r10e 没有 llvm，用 gcc
+            CC=$NDK/toolchains/aarch64-linux-android-4.9/prebuilt/linux-x86_64/bin/aarch64-linux-android-gcc
+            CHOST=aarch64-linux-android CFLAGS="--sysroot=$NDK/platforms/android-21/arch-arm64" \
+              ./configure --static --prefix=$HOME/thirdparty/zlib-arm64
+            make -j4 && make install
+            cd ..
+          fi
+          ls ~/thirdparty/zlib-arm64/lib 2>/dev/null | head
 
-      - name: 收集产物
-        continue-on-error: true
-        run: |
-          mkdir -p app/src/main/libs/arm64-v8a app/src/main/assets
-          echo "=== so ===" | tee -a ~/build.log
-          find work -name '*.so' | tee -a ~/build.log
-          find work -name '*.so' -exec cp -t app/src/main/libs/arm64-v8a/ {} + || true
-          ls -la app/src/main/libs/arm64-v8a | tee -a ~/build.log
-          echo "=== java ===" | tee -a ~/build.log
-          mkdir -p app/src/main/cocos2dx-java
-          cp -r ~/cocos2d-x-2.2.2/cocos2dx/platform/android/java/src/. app/src/main/cocos2dx-java/ || true
-          # cocos2d-x 2.2.2 用了 API 23 已删除的 FloatMath
-          find app/src/main/cocos2dx-java -name '*.java' -print0 | xargs -0 sed -i \
-            -e 's/FloatMath\.ceil(/(float)Math.ceil(/g' \
-            -e 's/FloatMath\.floor(/(float)Math.floor(/g' \
-            -e 's/FloatMath\.sqrt(/(float)Math.sqrt(/g'
-          grep -rn "FloatMath" app/src/main/cocos2dx-java | head -5 | tee -a ~/build.log
-          find app/src/main/cocos2dx-java -name '*.java' | head -20 | tee -a ~/build.log
-          echo "=== assets ===" | tee -a ~/build.log
-          cp -r work/Resources/. app/src/main/assets/ || true
-          du -sh app/src/main/assets | tee -a ~/build.log
-          exit 0
-
-      - name: 安装 Gradle
-        run: |
-          curl -fL --retry 5 --retry-all-errors -o gradle.zip https://services.gradle.org/distributions/gradle-8.7-bin.zip
-          unzip -q -o gradle.zip -d ~/
-          echo "$HOME/gradle-8.7/bin" >> $GITHUB_PATH
-
-      - name: 打包 APK
-        continue-on-error: true
-        run: |
-          set +e
-          gradle :app:assembleRelease --no-daemon --stacktrace > ~/gradle.log 2>&1
-          echo "gradle_rc=$?"
-          grep -E "(error:|FAILURE|What went wrong|Caused by|BUILD)" ~/gradle.log | head -30
-          find app/build/outputs -name '*.apk' -exec ls -lh {} \;
-          cat ~/gradle.log >> ~/build.log
-          exit 0
-
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: apk
-          path: app/build/outputs/apk/release/*.apk
-          if-no-files-found: warn
-
-      - name: 发布 Release
-        if: always()
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v1.22-clean-${{ github.run_number }}
-          name: 火影战记 1.22 clean arm64 #${{ github.run_number }}
-          body: 自动构建，armeabi-v7a，debug 签名
-          files: app/build/outputs/apk/release/*.apk
-          fail_on_unmatched_files: false
-
-      - name: 回传日志
+      - name: 上报阶段1日志
         if: always()
         run: |
-          { head -c 6000 ~/build.log; echo; echo "......[中间省略]......"; tail -c 45000 ~/build.log; } > /tmp/tail.log 2>/dev/null || true
-          BODY=$(python3 -c 'import json,sys;print(json.dumps(open("/tmp/tail.log",errors="replace").read()))')
-          curl -sS -X POST \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github+json" \
-            -H "Content-Type: application/json" \
-            -d "{\"title\":\"build log ${{ github.run_number }}\",\"body\":$BODY}" \
+          { echo "@@@ ZLIB 构建"; tail -30 ~/build.log; } 
+          tail -c 4000 ~/build.log > /tmp/t.log
+          BODY=$(python3 -c 'import json;print(json.dumps(open("/tmp/t.log",errors="replace").read()))')
+          curl -sS -X POST -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" -H "Content-Type: application/json" \
+            -d "{\"title\":\"log ${{ github.run_number }}-1\",\"body\":$BODY}" \
             https://api.github.com/repos/${{ github.repository }}/issues || true
