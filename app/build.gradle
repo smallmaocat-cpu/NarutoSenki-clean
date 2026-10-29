@@ -1,0 +1,35 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'com.smallmaocat.narutosenki'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.smallmaocat.narutosenki"
+        minSdk 21
+        targetSdk 34
+        versionCode 1
+        versionName "1.22-clean"
+        ndk { abiFilters 'armeabi-v7a' }
+    }
+
+    sourceSets {
+        main {
+            // 编译产物的 so 由 CI 复制到这里
+            jniLibs.srcDirs = ['libs']
+            java.srcDirs = ['src/main/java', 'cocos2dx-java']
+            assets.srcDirs = ['src/main/assets']
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    lint { abortOnError false }
+}
+
+dependencies { }
