@@ -1,0 +1,114 @@
+name: build-apk
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache toolchains
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/cocos2d-x-2.2.2
+            ~/android-ndk-r10e
+            ~/upstream
+          key: ns-toolchain-v1
+
+      - name: 下载 cocos2d-x 2.2.2
+        run: |
+          set -e
+          cd ~
+          if [ ! -d cocos2d-x-2.2.2 ]; then
+            curl -L --retry 3 -o cocos.zip \
+              https://github.com/LeaderOnePro/NarutoSenki/releases/download/v1.22/cocos2d-x-2.2.2.zip
+            unzip -q cocos.zip
+          fi
+          ls ~/cocos2d-x-2.2.2 | head
+
+      - name: 下载 NDK r10e
+        run: |
+          set -e
+          cd ~
+          if [ ! -d android-ndk-r10e ]; then
+            curl -L --retry 3 -o ndk.zip https://dl.google.com/android/repository/android-ndk-r10e-linux-x86_64.zip
+            unzip -q ndk.zip
+          fi
+          ~/android-ndk-r10e/ndk-build --version || true
+
+      - name: 下载上游游戏源码
+        run: |
+          set -e
+          mkdir -p ~/upstream
+          if [ ! -d ~/upstream/NarutoSenki ]; then
+            curl -L --retry 3 -o upstream.tar.gz \
+              https://codeload.github.com/LeaderOnePro/NarutoSenki/tar.gz/refs/tags/v1.22
+            mkdir -p upstream/NarutoSenki
+            tar xzf upstream.tar.gz -C upstream/NarutoSenki --strip-components=1
+          fi
+          ls ~/upstream/NarutoSenki
+
+      - name: 组装工程
+        run: |
+          set -e
+          rm -rf work && mkdir -p work
+          cp -r ~/upstream/NarutoSenki/Classes  work/Classes
+          cp -r ~/upstream/NarutoSenki/Resources work/Resources
+          cp -r proj.android work/proj.android
+          ln -s ~/cocos2d-x-2.2.2 work/cocos2d-x-2.2.2
+          # 资源里的中文目录/文件统一为 UTF-8 源码
+          find work/Classes -type f \( -name '*.cpp' -o -name '*.h' \) -print0 |
+          while IFS= read -r -d '' f; do
+            if ! iconv -f UTF-8 -t UTF-8 "$f" >/dev/null 2>&1; then
+              iconv -f GBK -t UTF-8 "$f" -o "$f.tmp" && mv "$f.tmp" "$f"
+            fi
+          done
+          find work/Classes -type f | wc -l
+
+      - name: ndk-build
+        run: |
+          set -e
+          cd work/proj.android
+          ~/android-ndk-r10e/ndk-build -j4 \
+            NDK_PROJECT_PATH=. \
+            APP_BUILD_SCRIPT=./jni/Android.mk \
+            NDK_APPLICATION_MK=./jni/Application.mk \
+            V=1 2>&1 | tail -80
+
+      - name: 收集产物
+        run: |
+          mkdir -p app/src/main/libs/armeabi-v7a
+          cp work/proj.android/libs/armeabi-v7a/*.so app/src/main/libs/armeabi-v7a/
+          # cocos2d-x 的 Java 层
+          cp -r work/cocos2d-x-2.2.2/cocos2dx/platform/android/java/src/* app/src/main/cocos2dx-java/ 2>/dev/null || true
+          # 素材
+          mkdir -p app/src/main/assets
+          cp -r work/Resources/* app/src/main/assets/
+          ls -la app/src/main/libs/armeabi-v7a | head
+
+      - name: 安装 Gradle
+        run: |
+          curl -L --retry 3 -o gradle.zip https://services.gradle.org/distributions/gradle-8.7-bin.zip
+          unzip -q gradle.zip -d ~/
+          echo "$HOME/gradle-8.7/bin" >> $GITHUB_PATH
+
+      - name: 打包 APK
+        run: |
+          set -e
+          gradle :app:assembleRelease --no-daemon -q 2>&1 | tail -60
+          ls -la app/build/outputs/apk/release/
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: apk
+          path: |
+            app/build/outputs/apk/release/*.apk
+          if-no-files-found: warn
