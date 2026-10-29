@@ -136,6 +136,16 @@ jobs:
           path: app/build/outputs/apk/release/*.apk
           if-no-files-found: warn
 
+      - name: 发布 Release
+        if: always()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.22-clean-${{ github.run_number }}
+          name: 火影战记 1.22 clean #${{ github.run_number }}
+          body: 自动构建，armeabi-v7a，debug 签名
+          files: app/build/outputs/apk/release/*.apk
+          fail_on_unmatched_files: false
+
       - name: 回传日志
         if: always()
         run: |
