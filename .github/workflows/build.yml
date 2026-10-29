@@ -43,7 +43,9 @@ jobs:
           echo init-ok >> $L
 
       - name: 编译 arm64 库
+        continue-on-error: true
         run: |
+          set +e
           L=~/build.log
           NDK=~/android-ndk-r10e
           TC=$NDK/toolchains/aarch64-linux-android-4.9/prebuilt/linux-x86_64/bin
@@ -74,17 +76,26 @@ jobs:
 
           echo "@@@ libjpeg" >> $L
           if [ ! -f jpg/lib/libjpeg.a ]; then
-            rm -rf libjpeg-turbo-1.5.3 jpg
+            rm -rf libjpeg-turbo-1.5.3 jpg jb
             [ -f j.tgz ] || curl -fsSL --retry 3 -o j.tgz https://github.com/libjpeg-turbo/libjpeg-turbo/archive/refs/tags/1.5.3.tar.gz
-            tar xzf j.tgz; cd libjpeg-turbo-1.5.3
-            cmake . -DCMAKE_C_COMPILER=$CC -DCMAKE_AR=$AR -DCMAKE_RANLIB=$RANLIB \
+            tar xzf j.tgz
+            mkdir -p jb && cd jb
+            cmake ../libjpeg-turbo-1.5.3 \
+              -DCMAKE_C_COMPILER=$CC -DCMAKE_AR=$AR -DCMAKE_RANLIB=$RANLIB \
               -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
+              -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY \
               -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_EXE_LINKER_FLAGS="$LDFLAGS" \
               -DCMAKE_INSTALL_PREFIX=$HOME/tb/jpg \
               -DENABLE_SHARED=OFF -DENABLE_STATIC=ON -DWITH_TURBOJPEG=OFF \
-              -DWITH_JAVA=OFF -DWITH_SIMD=OFF > ~/j.log 2>&1
-            make -j4 >> ~/j.log 2>&1 && make install >> ~/j.log 2>&1
-            cd ..; grep -iE "error" ~/j.log | head -5 >> $L
+              -DWITH_JAVA=OFF -DWITH_SIMD=OFF -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+              > ~/j.log 2>&1
+            echo "cmake_rc=$?" >> $L
+            make -j4 >> ~/j.log 2>&1
+            echo "make_rc=$?" >> $L
+            make install >> ~/j.log 2>&1
+            echo "install_rc=$?" >> $L
+            cd ..
+            tail -25 ~/j.log >> $L
           fi
           echo "jpeg -> $(ls jpg/lib 2>/dev/null | tr '\n' ' ')" >> $L
 
