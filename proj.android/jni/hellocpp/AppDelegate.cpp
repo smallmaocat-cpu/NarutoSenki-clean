@@ -1,11 +1,13 @@
 #include "AppDelegate.h"
 #include "cocos2d.h"
+#include "SimpleAudioEngine.h"
 #include "GameScene.h"
 #include <android/log.h>
 #include <stdio.h>
 #include <stdarg.h>
 
 USING_NS_CC;
+using namespace CocosDenshion;
 
 static void flog(const char* fmt, ...) {
     char buf[2048];
@@ -28,12 +30,14 @@ AppDelegate::~AppDelegate() {
 bool AppDelegate::applicationDidFinishLaunching() {
     flog("=== applicationDidFinishLaunching ===");
     CCDirector* pDirector = CCDirector::sharedDirector();
+    flog("director=%p", (void*)pDirector);
     pDirector->setOpenGLView(CCEGLView::sharedOpenGLView());
+    flog("setOpenGLView ok");
     pDirector->setDisplayStats(false);
     pDirector->setAnimationInterval(1.0f / 60);
-    flog("director configured, creating GameScene");
+    flog("about to create GameScene");
     CCScene* pScene = GameScene::create();
-    flog("GameScene created, running");
+    flog("GameScene=%p", (void*)pScene);
     pDirector->runWithScene(pScene);
     flog("runWithScene done");
     return true;
