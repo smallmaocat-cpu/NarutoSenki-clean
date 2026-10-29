@@ -192,6 +192,27 @@ jobs:
           grep -n "CC_USE_TIFF\|CC_USE_WEBP" $C/cocos2dx/platform/CCImageCommon_cpp.h | head -10 >> $L
           sed -i 's|#define CC_USE_WEBP||g' $C/cocos2dx/platform/CCImageCommon_cpp.h
           sed -i 's|#define CC_USE_TIFF||g' $C/cocos2dx/platform/CCImageCommon_cpp.h
+          # 6) 用 macro 关掉 tiff/webp 分支（CCImageCommon_cpp.h 用 #ifdef 判断）
+          H=$C/cocos2dx/platform/CCImageCommon_cpp.h
+          sed -i '1i #undef CC_USE_TIFF\n#undef CC_USE_WEBP' $H
+          # 再把 _tiffXXX 相关函数整体包进 #if 0
+          python3 - "$H" <<'PYEOF'
+import sys,re
+p=sys.argv[1]
+s=open(p,encoding='utf-8',errors='replace').read()
+# tiff 相关的静态函数块：从第一个 "static tmsize_t" 或 "_tiffReadProc" 到下一个 "// PNG" 之前
+start=None
+for pat in ["static tmsize_t _tiffReadProc","static tmsize_t","_tiffReadProc"]:
+    i=s.find(pat)
+    if i>0: start=i; break
+if start:
+    end=s.find("//////////////////////////////////////////////////////////////////////////", start)
+    if end<0: end=start+12000
+    s=s[:start]+"#if 0\n"+s[start:end]+"\n#endif\n"+s[end:]
+open(p,'w',encoding='utf-8').write(s)
+print("patched", bool(start))
+PYEOF
+          grep -n "CC_USE_TIFF\|CC_USE_WEBP\|#if 0" $H | head -10 >> $L
           echo "WebSocket removed" >> $L
           grep -c "cpp" $C/extensions/Android.mk >> $L
           echo "--- after patch ---" >> $L
