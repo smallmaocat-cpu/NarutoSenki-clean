@@ -1,5 +1,6 @@
 APP_STL := gnustl_static
-APP_CPPFLAGS := -frtti -DCC_ENABLE_CHIPMUNK_INTEGRATION=1 -w
+APP_CPPFLAGS := -frtti -fpermissive -DCC_ENABLE_CHIPMUNK_INTEGRATION=1 -w
+APP_CFLAGS := -fpermissive
 APP_ABI := arm64-v8a
 APP_PLATFORM := android-21
 NDK_TOOLCHAIN_VERSION := 4.9
