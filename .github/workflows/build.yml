@@ -186,6 +186,12 @@ jobs:
           sed -i '/CCImageCommonWebp/d;/CCImageWebp/d' $C/cocos2dx/Android.mk
           # 若 CCImage.cpp 里仍引用 webp 分支，也一并去掉
           grep -n "Webp" $C/cocos2dx/platform/CCImage.cpp >> $L 2>&1 | head -5
+          # 5) 关掉 tiff / webp 的包含与实现
+          sed -i '/#include "tiffio.h"/d;/#include "decode.h"/d;/#include "webp\//d' \
+            $C/cocos2dx/platform/CCImageCommon_cpp.h
+          grep -n "CC_USE_TIFF\|CC_USE_WEBP" $C/cocos2dx/platform/CCImageCommon_cpp.h | head -10 >> $L
+          sed -i 's|#define CC_USE_WEBP||g' $C/cocos2dx/platform/CCImageCommon_cpp.h
+          sed -i 's|#define CC_USE_TIFF||g' $C/cocos2dx/platform/CCImageCommon_cpp.h
           echo "WebSocket removed" >> $L
           grep -c "cpp" $C/extensions/Android.mk >> $L
           echo "--- after patch ---" >> $L
