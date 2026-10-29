@@ -172,6 +172,12 @@ jobs:
           grep -n "webp_stub" work/proj.android/jni/Android.mk >> $L
           echo "classes=$(find work/Classes -type f | wc -l)" >> $L
 
+      - name: 重算 md5.xml
+        continue-on-error: true
+        run: |
+          set +e
+          python3 tools/fix_md5.py work/Resources 2>&1 | tee -a ~/build.log
+
       - name: 修补 cocos2d 源码
         continue-on-error: true
         run: |
