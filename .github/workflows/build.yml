@@ -173,7 +173,7 @@ jobs:
             > ~/ndk.log 2>&1
           rc=$?
           echo "ndk_rc=$rc" >> $L
-          grep -E "error:|undefined reference|\*\*\*|Install *:" ~/ndk.log | head -50 >> $L
+          grep -E "error:|undefined reference|\*\*\*|Install *:" ~/ndk.log | head -60 >> $L
           tail -15 ~/ndk.log >> $L
           ls -la libs/arm64-v8a/ >> $L 2>&1
           exit 0
