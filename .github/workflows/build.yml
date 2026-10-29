@@ -98,12 +98,13 @@ jobs:
         if: always()
         run: |
           set +e
-          tail -c 150000 ~/build.log > build.log
-          git config user.name  "ci"
-          git config user.email "ci@local"
-          git add -f build.log
-          git commit -m "ci: build log [skip ci]"
-          git push
+          BODY=$(tail -c 60000 ~/build.log | python3 -c 'import sys,json;print(json.dumps(sys.stdin.read()))')
+          curl -sS -X POST \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Content-Type: application/json" \
+            -d "{\"title\":\"build log ${{ github.run_number }}\",\"body\":$BODY}" \
+            https://api.github.com/repos/${{ github.repository }}/issues
 
       - name: 收集产物
         run: |
