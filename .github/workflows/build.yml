@@ -24,11 +24,12 @@ jobs:
             ~/cocos2d-x-2.2.2
             ~/android-ndk-r10e
             ~/tb
-          key: ns-v5
+          key: ns-v6
 
       - name: 初始化
         run: |
-          echo "=== start ===" > ~/build.log
+          L=~/build.log
+          echo "=== start ===" > $L
           cd ~
           if [ ! -d cocos2d-x-2.2.2/cocos2dx ]; then
             curl -fL --retry 5 --retry-all-errors -o cocos.zip \
@@ -41,76 +42,76 @@ jobs:
             unzip -q -o ndk.zip
             chmod +x android-ndk-r10e/ndk-build
           fi
+          echo "init done" >> $L
 
-      - name: 预编译库清单
+      - name: 编译 arm64 库
         run: |
-          P=~/cocos2d-x-2.2.2/cocos2dx/platform/third_party/android/prebuilt
-          {
-            echo "@@@ LIBS"
-            for d in $P/*/; do
-              echo "$(basename $d): $(ls $d/libs 2>/dev/null | tr '\n' ' ')"
-            done
-            echo "@@@ TOOLCHAIN"
-            ls ~/android-ndk-r10e/toolchains/ | head
-            ls ~/android-ndk-r10e/platforms/ | tr '\n' ' '
-          } 2>&1 | tee -a ~/build.log
-
-      - name: 编译 arm64 第三方库
-        run: |
-          set -x
+          L=~/build.log
           NDK=~/android-ndk-r10e
           TC=$NDK/toolchains/aarch64-linux-android-4.9/prebuilt/linux-x86_64/bin
           export CC=$TC/aarch64-linux-android-gcc
           export AR=$TC/aarch64-linux-android-ar
           export RANLIB=$TC/aarch64-linux-android-ranlib
-          export CFLAGS="-O2 -fPIC --sysroot=$NDK/platforms/android-21/arch-arm64 -I$NDK/platforms/android-21/arch-arm64/usr/include"
-          export LDFLAGS="--sysroot=$NDK/platforms/android-21/arch-arm64"
           export CHOST=aarch64-linux-android
-          export ac_cv_host=aarch64-linux-android
+          SR="--sysroot=$NDK/platforms/android-21/arch-arm64"
+          export CFLAGS="-O2 -fPIC $SR"
+          export CXXFLAGS="$CFLAGS"
+          export LDFLAGS="$SR"
           mkdir -p ~/tb && cd ~/tb
 
-          # ---- zlib ----
-          if [ ! -f ~/tb/zlib/lib/libz.a ]; then
-            curl -fL --retry 3 -o z.tgz https://zlib.net/fossils/zlib-1.2.13.tar.gz
-            tar xzf z.tgz && cd zlib-1.2.13
-            sed -i 's/^CFLAGS=.*/CFLAGS=-O2 -fPIC/' configure
-            ./configure --static --prefix=$HOME/tb/zlib
-            make -j4 && make install
-            cd ..
+          echo "@@@ zlib" >> $L
+          if [ ! -f zlib/lib/libz.a ]; then
+            curl -fsSL --retry 3 -o z.tgz https://github.com/madler/zlib/archive/refs/tags/v1.2.13.tar.gz
+            tar xzf z.tgz; cd zlib-1.2.13
+            sed -i 's|^CFLAGS=.*|CFLAGS=-O2 -fPIC|' configure
+            ./configure --static --prefix=$HOME/tb/zlib > ~/z.log 2>&1
+            make -j4 >> ~/z.log 2>&1 && make install >> ~/z.log 2>&1
+            cd ..; tail -5 ~/z.log >> $L
           fi
-          echo "zlib: $(ls ~/tb/zlib/lib 2>/dev/null)"
+          echo "zlib -> $(ls zlib/lib 2>/dev/null)" >> $L
 
-          # ---- libpng ----
-          if [ ! -f ~/tb/png/lib/libpng.a ]; then
-            curl -fL --retry 3 -o p.tgz https://download.sourceforge.net/libpng/libpng-1.6.40.tar.gz
-            tar xzf p.tgz && cd libpng-1.6.40
+          echo "@@@ libpng" >> $L
+          if [ ! -f png/lib/libpng.a ]; then
+            curl -fsSL --retry 3 -o p.tgz https://github.com/pnggroup/libpng/archive/refs/tags/v1.6.40.tar.gz
+            tar xzf p.tgz; cd libpng-1.6.40
             ./configure --host=aarch64-linux-android --enable-static --disable-shared \
-              --prefix=$HOME/tb/png CPPFLAGS="-I$HOME/tb/zlib/include" LDFLAGS="-L$HOME/tb/zlib/lib"
-            make -j4 && make install
-            cd ..
+              --prefix=$HOME/tb/png --with-zlib-prefix=$HOME/tb/zlib > ~/p.log 2>&1
+            make -j4 >> ~/p.log 2>&1 && make install >> ~/p.log 2>&1
+            cd ..; tail -5 ~/p.log >> $L
           fi
-          echo "png: $(ls ~/tb/png/lib 2>/dev/null)"
+          echo "png -> $(ls png/lib 2>/dev/null)" >> $L
 
-          # ---- libjpeg-turbo ----
-          if [ ! -f ~/tb/jpg/lib/libjpeg.a ]; then
-            curl -fL --retry 3 -o j.tgz https://download.sourceforge.net/libjpeg-turbo/libjpeg-turbo-1.5.3.tar.gz
-            tar xzf j.tgz && cd libjpeg-turbo-1.5.3
-            sed -i 's/^#define JPEG_LIB_VERSION.*//' jconfig.h.in 2>/dev/null || true
-            cmake -DCMAKE_C_COMPILER=$CC -DCMAKE_AR=$AR -DCMAKE_RANLIB=$RANLIB \
-              -DCMAKE_SYSTEM_NAME=Android -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
-              -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_INSTALL_PREFIX=$HOME/tb/jpg \
-              -DENABLE_SHARED=OFF -DENABLE_STATIC=ON -DWITH_TURBOJPEG=OFF -DWITH_JAVA=OFF . \
-              > ~/cmake.log 2>&1 || tail -20 ~/cmake.log
-            make -j4 && make install
-            cd ..
+          echo "@@@ libjpeg" >> $L
+          if [ ! -f jpg/lib/libjpeg.a ]; then
+            curl -fsSL --retry 3 -o j.tgz https://github.com/libjpeg-turbo/libjpeg-turbo/archive/refs/tags/1.5.3.tar.gz
+            tar xzf j.tgz; cd libjpeg-turbo-1.5.3
+            mkdir -p b && cd b
+            cmake .. -DCMAKE_C_COMPILER=$CC -DCMAKE_AR=$AR -DCMAKE_RANLIB=$RANLIB \
+              -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
+              -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_EXE_LINKER_FLAGS="$LDFLAGS" \
+              -DCMAKE_INSTALL_PREFIX=$HOME/tb/jpg \
+              -DENABLE_SHARED=OFF -DENABLE_STATIC=ON -DWITH_TURBOJPEG=OFF -DWITH_JAVA=OFF \
+              -DWITH_SIMD=OFF > ~/j.log 2>&1
+            make -j4 >> ~/j.log 2>&1 && make install >> ~/j.log 2>&1
+            cd ../..; tail -8 ~/j.log >> $L
           fi
-          echo "jpeg: $(ls ~/tb/jpg/lib 2>/dev/null)"
+          echo "jpeg -> $(ls jpg/lib 2>/dev/null)" >> $L
+
+          echo "@@@ 复制进 prebuilt" >> $L
+          P=~/cocos2d-x-2.2.2/cocos2dx/platform/third_party/android/prebuilt
+          for n in libpng png; do :; done
+          mkdir -p $P/libpng/libs/arm64-v8a $P/libjpeg/libs/arm64-v8a
+          cp ~/tb/png/lib/libpng.a   $P/libpng/libs/arm64-v8a/ 2>/dev/null && echo "png ok" >> $L
+          cp ~/tb/png/lib/libpng16.a $P/libpng/libs/arm64-v8a/ 2>/dev/null
+          cp ~/tb/png/lib/libpng*.a  $P/libpng/libs/arm64-v8a/ 2>/dev/null
+          cp ~/tb/jpg/lib/libjpeg.a  $P/libjpeg/libs/arm64-v8a/ 2>/dev/null && echo "jpeg ok" >> $L
+          ls -la $P/libpng/libs/arm64-v8a $P/libjpeg/libs/arm64-v8a >> $L 2>&1
           exit 0
 
       - name: 上报
         if: always()
         run: |
-          { head -c 3000 ~/build.log; echo; echo "......"; tail -c 30000 ~/build.log; } > /tmp/t.log
+          { head -c 2000 ~/build.log; echo; echo "......"; tail -c 32000 ~/build.log; } > /tmp/t.log
           BODY=$(python3 -c 'import json;print(json.dumps(open("/tmp/t.log",errors="replace").read()))')
           curl -sS -X POST -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github+json" -H "Content-Type: application/json" \
