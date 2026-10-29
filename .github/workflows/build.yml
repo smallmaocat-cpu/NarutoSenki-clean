@@ -108,12 +108,21 @@ jobs:
 
       - name: 收集产物
         run: |
-          set -eo pipefail
-          mkdir -p app/src/main/libs/armeabi-v7a app/src/main/assets app/src/main/cocos2dx-java
-          cp work/proj.android/libs/armeabi-v7a/*.so app/src/main/libs/armeabi-v7a/
-          cp -r work/cocos2d-x-2.2.2/cocos2dx/platform/android/java/src/* app/src/main/cocos2dx-java/ || true
-          cp -r work/Resources/* app/src/main/assets/
+          set -x
+          mkdir -p app/src/main/libs/armeabi-v7a app/src/main/assets
+          echo "=== 找 so ==="
+          find work -name '*.so' -print
+          find work -name '*.so' -exec cp -t app/src/main/libs/armeabi-v7a/ {} +
           ls -la app/src/main/libs/armeabi-v7a
+          echo "=== cocos java ==="
+          ls ~/cocos2d-x-2.2.2/cocos2dx/platform/android/java/src || true
+          mkdir -p app/src/main/cocos2dx-java
+          cp -r ~/cocos2d-x-2.2.2/cocos2dx/platform/android/java/src/. app/src/main/cocos2dx-java/ || true
+          ls app/src/main/cocos2dx-java
+          echo "=== 资源 ==="
+          cp -r work/Resources/. app/src/main/assets/ || true
+          du -sh app/src/main/assets
+          ls app/src/main/assets | head
 
       - name: 安装 Gradle
         run: |
