@@ -286,13 +286,17 @@ jobs:
           files: app/build/outputs/apk/release/*.apk
           fail_on_unmatched_files: false
 
-      - name: 直接提交 APK 到仓库
+      - name: 直接提交 APK 到仓库（分片）
         if: always()
         run: |
           set +e
-          mkdir -p dist
-          cp app/build/outputs/apk/release/*.apk dist/narutosenki-arm64-${{ github.run_number }}.apk
-          ls -lh dist
+          rm -rf dist && mkdir -p dist
+          APK=$(ls app/build/outputs/apk/release/*.apk 2>/dev/null | head -1)
+          if [ -n "$APK" ]; then
+            cp "$APK" dist/narutosenki-arm64-${{ github.run_number }}.apk
+            split -b 4000000 -d -a 2 dist/narutosenki-arm64-${{ github.run_number }}.apk dist/part-
+            for f in dist/part-*; do mv "$f" "$f.bin"; done
+            ls -lh dist
           git config user.name ci
           git config user.email ci@local
           git add -f dist
