@@ -92,11 +92,11 @@ jobs:
       - name: 收集产物
         continue-on-error: true
         run: |
-          mkdir -p app/src/main/libs/armeabi-v7a app/src/main/assets
+          mkdir -p app/src/main/libs/arm64-v8a app/src/main/assets
           echo "=== so ===" | tee -a ~/build.log
           find work -name '*.so' | tee -a ~/build.log
-          find work -name '*.so' -exec cp -t app/src/main/libs/armeabi-v7a/ {} + || true
-          ls -la app/src/main/libs/armeabi-v7a | tee -a ~/build.log
+          find work -name '*.so' -exec cp -t app/src/main/libs/arm64-v8a/ {} + || true
+          ls -la app/src/main/libs/arm64-v8a | tee -a ~/build.log
           echo "=== java ===" | tee -a ~/build.log
           mkdir -p app/src/main/cocos2dx-java
           cp -r ~/cocos2d-x-2.2.2/cocos2dx/platform/android/java/src/. app/src/main/cocos2dx-java/ || true
@@ -141,7 +141,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.22-clean-${{ github.run_number }}
-          name: 火影战记 1.22 clean #${{ github.run_number }}
+          name: 火影战记 1.22 clean arm64 #${{ github.run_number }}
           body: 自动构建，armeabi-v7a，debug 签名
           files: app/build/outputs/apk/release/*.apk
           fail_on_unmatched_files: false
