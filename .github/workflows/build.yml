@@ -263,11 +263,24 @@ jobs:
         if: always()
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.22-arm64-${{ github.run_number }}
+          tag_name: v1.22-arm64-${{ github.run_number }}-${{ github.run_attempt }}
           name: 火影战记 arm64 #${{ github.run_number }}
           body: arm64 自建库
           files: app/build/outputs/apk/release/*.apk
           fail_on_unmatched_files: false
+
+      - name: 直接提交 APK 到仓库
+        if: always()
+        run: |
+          set +e
+          mkdir -p dist
+          cp app/build/outputs/apk/release/*.apk dist/narutosenki-arm64-${{ github.run_number }}.apk
+          ls -lh dist
+          git config user.name ci
+          git config user.email ci@local
+          git add -f dist
+          git commit -m "apk ${{ github.run_number }}" || true
+          git push || true
 
       - name: 上报
         if: always()
