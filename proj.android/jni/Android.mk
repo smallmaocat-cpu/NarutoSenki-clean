@@ -27,9 +27,16 @@ LOCAL_SRC_FILES := hellocpp/main.cpp \
             ../../Classes/RankingLayer.cpp \
             ../../Classes/SelectLayer.cpp \
             ../../Classes/SkillLayer.cpp \
-            ../../Classes/StartMenu.cpp
+            ../../Classes/StartMenu.cpp \
+            ../../Classes/MyUtils/CCScrewLayer.cpp \
+            ../../Classes/MyUtils/CCShake.cpp \
+            ../../Classes/MyUtils/CCStrokeLabel.cpp \
+            ../../Classes/MyUtils/KTools.cpp \
+            ../../Classes/MyUtils/MD5ChecksumDefines.cpp \
+            ../../Classes/MyUtils/sqlite3.c
 
-LOCAL_C_INCLUDES := $(LOCAL_PATH)/../../Classes
+LOCAL_C_INCLUDES := $(LOCAL_PATH)/../../Classes \
+                    $(LOCAL_PATH)/../../Classes/MyUtils
 
 LOCAL_WHOLE_STATIC_LIBRARIES := cocos2dx_static
 LOCAL_WHOLE_STATIC_LIBRARIES += cocosdenshion_static
