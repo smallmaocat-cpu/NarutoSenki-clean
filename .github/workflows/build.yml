@@ -125,6 +125,14 @@ jobs:
           echo "@@@ 去掉 tiff/webp" >> $L
           sed -i '/cocos_libtiff_static/d;/cocos_libwebp_static/d;/import-module,libtiff/d;/import-module,libwebp/d' \
             ~/cocos2d-x-2.2.2/cocos2dx/Android.mk
+          echo "--- 移除 libwebsockets ---" >> $L
+          sed -i '/websockets/d' ~/cocos2d-x-2.2.2/cocos2dx/Android.mk
+          grep -rn "websockets" ~/cocos2d-x-2.2.2/cocos2dx/Android.mk >> $L 2>&1
+          grep -rn "websockets" ~/cocos2d-x-2.2.2/extensions/Android.mk >> $L 2>&1
+          sed -i '/websockets/d' ~/cocos2d-x-2.2.2/extensions/Android.mk
+          echo "after:" >> $L
+          grep -n "STATIC_LIBRARIES\|import-module" ~/cocos2d-x-2.2.2/cocos2dx/Android.mk >> $L
+          grep -n "STATIC_LIBRARIES\|import-module" ~/cocos2d-x-2.2.2/extensions/Android.mk >> $L
           grep -n "STATIC_LIBRARIES\|import-module" ~/cocos2d-x-2.2.2/cocos2dx/Android.mk >> $L
           exit 0
 
