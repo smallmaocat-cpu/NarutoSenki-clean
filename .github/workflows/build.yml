@@ -228,9 +228,9 @@ jobs:
           set +e
           L=~/build.log
           echo "@@@ package" >> $L
-          mkdir -p app/src/main/libs/arm64-v8a app/src/main/assets app/src/main/cocos2dx-java
-          cp work/proj.android/libs/arm64-v8a/*.so app/src/main/libs/arm64-v8a/ 2>/dev/null
-          ls -la app/src/main/libs/arm64-v8a >> $L 2>&1
+          mkdir -p app/src/main/jniLibs/arm64-v8a app/src/main/assets app/src/main/cocos2dx-java
+          cp -v work/proj.android/libs/arm64-v8a/*.so app/src/main/jniLibs/arm64-v8a/
+          ls -la app/src/main/jniLibs/arm64-v8a >> $L 2>&1
           cp -r ~/cocos2d-x-2.2.2/cocos2dx/platform/android/java/src/. app/src/main/cocos2dx-java/ || true
           find app/src/main/cocos2dx-java -name '*.java' -print0 | xargs -0 sed -i \
             -e 's/FloatMath\.ceil(/(float)Math.ceil(/g' \
@@ -246,6 +246,10 @@ jobs:
           echo "gradle_rc=$?" >> $L
           grep -E "error:|FAILURE|What went wrong|BUILD" ~/g.log | head -20 >> $L
           find app/build/outputs -name '*.apk' -exec ls -lh {} \; >> $L 2>&1
+          echo "=== APK 内 so 检查 ===" >> $L
+          for f in app/build/outputs/apk/release/*.apk; do
+            unzip -l "$f" | grep -E "\.so$" >> $L 2>&1
+          done
           exit 0
 
       - uses: actions/upload-artifact@v4
