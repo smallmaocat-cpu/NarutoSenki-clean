@@ -76,6 +76,21 @@ jobs:
           done
           find work/Classes -type f | wc -l
 
+      - name: 预编译库架构普查
+        run: |
+          P=~/cocos2d-x-2.2.2/cocos2dx/platform/third_party/android/prebuilt
+          echo "== prebuilt 目录 =="
+          ls $P
+          echo ""
+          for d in $P/*/; do
+            n=$(basename $d)
+            abis=$(ls $d/libs 2>/dev/null | tr '\n' ' ')
+            echo "$n -> [$abis]"
+          done
+          echo ""
+          echo "== cocos2dx 里 import-module 预编译库的地方 =="
+          grep -rn "import-module.*third_party" ~/cocos2d-x-2.2.2 --include=Android.mk | head -20
+
       - name: ndk-build
         continue-on-error: true
         run: |
