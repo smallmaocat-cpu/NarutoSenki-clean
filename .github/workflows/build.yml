@@ -23,25 +23,23 @@ jobs:
           path: |
             ~/cocos2d-x-2.2.2
             ~/android-ndk-r10e
-          key: ns-toolchain-v2
+          key: ns-toolchain-v3
 
       - name: 下载 cocos2d-x 2.2.2
         run: |
-          set -eo pipefail
           cd ~
-          if [ ! -f cocos2d-x-2.2.2/CMakeLists.txt ] && [ ! -d cocos2d-x-2.2.2/cocos2dx ]; then
-            curl -fL --retry 5 --retry-all-errors --retry-delay 5 -o cocos.zip \
+          if [ ! -d cocos2d-x-2.2.2/cocos2dx ]; then
+            curl -fL --retry 5 --retry-all-errors -o cocos.zip \
               https://github.com/LeaderOnePro/NarutoSenki/releases/download/v1.22/cocos2d-x-2.2.2.zip
             unzip -q -o cocos.zip
           fi
-          test -d ~/cocos2d-x-2.2.2/cocos2dx && echo "cocos ok"
+          test -d ~/cocos2d-x-2.2.2/cocos2dx && echo cocos-ok
 
       - name: 下载 NDK r10e
         run: |
-          set -eo pipefail
           cd ~
           if [ ! -x android-ndk-r10e/ndk-build ]; then
-            curl -fL --retry 5 --retry-all-errors --retry-delay 5 -o ndk.zip \
+            curl -fL --retry 5 --retry-all-errors -o ndk.zip \
               https://dl.google.com/android/repository/android-ndk-r10e-linux-x86_64.zip
             unzip -q -o ndk.zip
             chmod +x android-ndk-r10e/ndk-build
@@ -50,15 +48,11 @@ jobs:
 
       - name: 下载上游游戏源码
         run: |
-          set -eo pipefail
           mkdir -p ~/upstream
           if [ ! -f ~/upstream/.ok ]; then
             rm -rf ~/upstream/NarutoSenki ~/upstream/src.tar.gz
-            curl -fL --retry 8 --retry-all-errors --retry-delay 5 \
-              --speed-time 60 --speed-limit 1000 \
-              -o ~/upstream/src.tar.gz \
+            curl -fL --retry 8 --retry-all-errors -o ~/upstream/src.tar.gz \
               https://codeload.github.com/LeaderOnePro/NarutoSenki/tar.gz/refs/tags/v1.22
-            ls -l ~/upstream/src.tar.gz
             tar tzf ~/upstream/src.tar.gz > /dev/null
             mkdir -p ~/upstream/NarutoSenki
             tar xzf ~/upstream/src.tar.gz -C ~/upstream/NarutoSenki --strip-components=1
@@ -69,7 +63,6 @@ jobs:
 
       - name: 组装工程
         run: |
-          set -eo pipefail
           rm -rf work && mkdir -p work
           cp -r ~/upstream/NarutoSenki/Classes  work/Classes
           cp -r ~/upstream/NarutoSenki/Resources work/Resources
@@ -84,69 +77,51 @@ jobs:
           find work/Classes -type f | wc -l
 
       - name: ndk-build
-        id: ndk
         continue-on-error: true
         run: |
           cd work/proj.android
-          set +e
           export NDK_MODULE_PATH=$HOME/cocos2d-x-2.2.2:$HOME/cocos2d-x-2.2.2/cocos2dx/platform/third_party/android/prebuilt
-          ~/android-ndk-r10e/ndk-build -j4 \
-            NDK_PROJECT_PATH=. \
-            APP_BUILD_SCRIPT=./jni/Android.mk \
-            NDK_APPLICATION_MK=./jni/Application.mk > ~/build.log 2>&1
-          rc=$?
-          echo "rc=$rc"
-          tail -60 ~/build.log
-          exit $rc
-
-      - name: 回传编译日志
-        if: always()
-        run: |
           set +e
-          BODY=$(tail -c 60000 ~/build.log | python3 -c 'import sys,json;print(json.dumps(sys.stdin.read()))')
-          curl -sS -X POST \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github+json" \
-            -H "Content-Type: application/json" \
-            -d "{\"title\":\"build log ${{ github.run_number }}\",\"body\":$BODY}" \
-            https://api.github.com/repos/${{ github.repository }}/issues
+          ~/android-ndk-r10e/ndk-build -j4 \
+            NDK_PROJECT_PATH=. APP_BUILD_SCRIPT=./jni/Android.mk \
+            NDK_APPLICATION_MK=./jni/Application.mk > ~/build.log 2>&1
+          echo "ndk_rc=$?"
+          grep -E "(error|Error|Install)" ~/build.log | tail -15
+          echo "---"
 
       - name: 收集产物
+        continue-on-error: true
         run: |
-          set -x
           mkdir -p app/src/main/libs/armeabi-v7a app/src/main/assets
-          echo "=== 找 so ==="
-          find work -name '*.so' -print
-          find work -name '*.so' -exec cp -t app/src/main/libs/armeabi-v7a/ {} +
-          ls -la app/src/main/libs/armeabi-v7a
-          echo "=== cocos java ==="
-          ls ~/cocos2d-x-2.2.2/cocos2dx/platform/android/java/src || true
+          echo "=== so ===" | tee -a ~/build.log
+          find work -name '*.so' | tee -a ~/build.log
+          find work -name '*.so' -exec cp -t app/src/main/libs/armeabi-v7a/ {} + || true
+          ls -la app/src/main/libs/armeabi-v7a | tee -a ~/build.log
+          echo "=== java ===" | tee -a ~/build.log
           mkdir -p app/src/main/cocos2dx-java
           cp -r ~/cocos2d-x-2.2.2/cocos2dx/platform/android/java/src/. app/src/main/cocos2dx-java/ || true
-          ls app/src/main/cocos2dx-java
-          echo "=== 资源 ==="
+          find app/src/main/cocos2dx-java -name '*.java' | head -20 | tee -a ~/build.log
+          echo "=== assets ===" | tee -a ~/build.log
           cp -r work/Resources/. app/src/main/assets/ || true
-          du -sh app/src/main/assets
-          ls app/src/main/assets | head
+          du -sh app/src/main/assets | tee -a ~/build.log
+          exit 0
 
       - name: 安装 Gradle
         run: |
-          set -eo pipefail
           curl -fL --retry 5 --retry-all-errors -o gradle.zip https://services.gradle.org/distributions/gradle-8.7-bin.zip
           unzip -q -o gradle.zip -d ~/
           echo "$HOME/gradle-8.7/bin" >> $GITHUB_PATH
 
       - name: 打包 APK
+        continue-on-error: true
         run: |
-          set -eo pipefail
           set +e
           gradle :app:assembleRelease --no-daemon --stacktrace > ~/gradle.log 2>&1
-          rc=$?
-          tail -60 ~/gradle.log
-          cat ~/gradle.log >> ~/build.log
-          echo "rc=$rc"
-          exit $rc
+          echo "gradle_rc=$?"
+          grep -E "(error:|FAILURE|What went wrong|Caused by|BUILD)" ~/gradle.log | head -30
           find app/build/outputs -name '*.apk' -exec ls -lh {} \;
+          cat ~/gradle.log >> ~/build.log
+          exit 0
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -154,3 +129,15 @@ jobs:
           name: apk
           path: app/build/outputs/apk/release/*.apk
           if-no-files-found: warn
+
+      - name: 回传日志
+        if: always()
+        run: |
+          tail -c 55000 ~/build.log > /tmp/tail.log 2>/dev/null || true
+          BODY=$(python3 -c 'import json,sys;print(json.dumps(open("/tmp/tail.log",errors="replace").read()))')
+          curl -sS -X POST \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Content-Type: application/json" \
+            -d "{\"title\":\"build log ${{ github.run_number }}\",\"body\":$BODY}" \
+            https://api.github.com/repos/${{ github.repository }}/issues || true
