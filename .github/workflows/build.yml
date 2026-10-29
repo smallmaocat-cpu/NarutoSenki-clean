@@ -181,6 +181,11 @@ jobs:
           # 3) 彻底移除 WebSocket（依赖已删除的 libwebsockets）
           sed -i '/WebSocket/d' $C/extensions/Android.mk
           rm -f $C/extensions/network/WebSocket.cpp $C/extensions/network/WebSocket.h
+          # 4) 移除 webp 图片解码（已删 libwebp 库）
+          rm -f $C/cocos2dx/platform/CCImageCommonWebp.cpp
+          sed -i '/CCImageCommonWebp/d;/CCImageWebp/d' $C/cocos2dx/Android.mk
+          # 若 CCImage.cpp 里仍引用 webp 分支，也一并去掉
+          grep -n "Webp" $C/cocos2dx/platform/CCImage.cpp >> $L 2>&1 | head -5
           echo "WebSocket removed" >> $L
           grep -c "cpp" $C/extensions/Android.mk >> $L
           echo "--- after patch ---" >> $L
